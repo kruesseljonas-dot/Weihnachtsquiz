@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎄 Weihnachtsquiz</title>
+
+<style>
+:root{
+  --glass:rgba(255,255,255,.15);
+  --good:#2ecc71;
+  --bad:#e74c3c;
+  --accent:#f1c40f;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  font-family:system-ui, sans-serif;
+  color:white;
+
+  /* HINTERGRUND */
+  background-image:
+    linear-gradient(to bottom, rgba(0,0,0,.45), rgba(0,0,0,.75)),
+    url("https://images.unsplash.com/photo-1543589077-47d81606c1bf");
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
+
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* SCHNEEFALL CANVAS */
+#snow {
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+  z-index:1;
+}
+
+.container{
+  max-width:520px;
+  margin:auto;
+  padding:20px;
+  position:relative;
+  z-index:2;
+}
+
+.card{
+  background:var(--glass);
+  backdrop-filter:blur(12px);
+  border-radius:22px;
+  padding:22px;
+  margin-top:20px;
+  animation:fade .35s ease;
+}
+
+@keyframes fade{
+  from{opacity:0;transform:translateY(15px)}
+  to{opacity:1;transform:none}
+}
+
+h1{text-align:center;font-size:2.2rem}
+
+button{
+  width:100%;
+  padding:16px;
+  margin-top:12px;
+  font-size:1.05rem;
+  font-weight:600;
+  border:none;
+  border-radius:16px;
+  background:#ffffff22;
+  color:white;
+}
+button:active{transform:scale(.96)}
+
+.answer.correct{background:var(--good)}
+.answer.wrong{background:var(--bad)}
+.hidden{display:none}
+
+#timer{
+  font-size:1.3rem;
+  text-align:center;
+  color:var(--accent);
+  margin:10px 0;
+}
+
+.scoreline{
+  font-size:1rem;
+  margin:6px 0;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="snow"></canvas>
+
+<div class="container">
+
+<h1>🎄 Weihnachtsquiz</h1>
+
+<div id="start" class="card">
+  <p>Spieleranzahl (2–8)</p>
+  <input id="playerCount" type="number" min="2" max="8"
+    style="width:100%;padding:14px;border-radius:14px;border:none">
+  <button onclick="startGame()">Spiel starten</button>
+</div>
+
+<div id="game" class="card hidden">
+  <div id="roundInfo"></div>
+  <h3 id="playerTurn"></h3>
+  <div id="timer"></div>
+  <h2 id="question"></h2>
+  <button onclick="startDiscussion()">🗣️ Diskussionsrunde starten</button>
+  <div id="answers"></div>
+</div>
+
+<div id="result" class="card hidden">
+  <h2 id="resultText"></h2>
+  <div id="scoreboardRound"></div>
+  <button onclick="nextTurn()">➡️ Nächster Spieler</button>
+</div>
+
+<div id="end" class="card hidden">
+  <h2>🏆 Endergebnis</h2>
+  <div id="scoreboardEnd"></div>
+</div>
+
+</div>
+
+<script>
+/* ---------- SPIELLOGIK ---------- */
+let players=[], scores=[];
+let currentPlayer=0, round=0;
+let discussion=false;
+let time=10, timerInt;
+
+const questions=[
+{q:"In welchem Jahrhundert wurde der Weihnachtsbaum populär?",a:["16.","18.","19."],c:1},
+{q:"Welches Land feiert Weihnachten am 7. Januar?",a:["Russland","Spanien","Italien"],c:0},
+{q:"Was symbolisieren Kerzen ursprünglich?",a:["Dekoration","Licht gegen Dunkelheit","Wohlstand"],c:1},
+{q:"Welche Farbe hatte der Weihnachtsmann früher oft?",a:["Grün","Rot","Braun"],c:0},
+{q:"Woher stammt ‚Stille Nacht‘?",a:["Deutschland","Österreich","Schweiz"],c:1}
+];
+
+const sounds={
+  tick:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-fast-small-sweep-transition-166.wav"),
+  good:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.wav"),
+  bad:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.wav")
+};
+
+function startGame(){
+  const c=playerCount.value;
+  if(c<2||c>8) return alert("2–8 Spieler");
+  for(let i=0;i<c;i++){players.push("Spieler "+(i+1));scores.push(0);}
+  start.classList.add("hidden");
+  game.classList.remove("hidden");
+  showQuestion();
+}
+
+function showQuestion(){
+  discussion=false;
+  time=10;
+  roundInfo.innerText="Runde "+(round+1);
+  playerTurn.innerText=players[currentPlayer]+" ist dran";
+  timer.innerText="⏱️ "+time+" Sekunden";
+  const q=questions[round];
+  question.innerText=q.q;
+  answers.innerHTML="";
+  q.a.forEach((t,i)=>{
+    const b=document.createElement("button");
+    b.className="answer";
+    b.innerText=t;
+    b.onclick=()=>answer(i,b);
+    answers.appendChild(b);
+  });
+  startTimer();
+}
+
+function startTimer(){
+  clearInterval(timerInt);
+  timerInt=setInterval(()=>{
+    time--;
+    sounds.tick.play();
+    timer.innerText="⏱️ "+time+" Sekunden";
+    if(time<=0){
+      clearInterval(timerInt);
+      endAnswer();
+    }
+  },1000);
+}
+
+function startDiscussion(){
+  discussion=true;
+  alert("Diskussionsrunde aktiv – Risiko!");
+}
+
+function answer(i,btn){
+  clearInterval(timerInt);
+  const q=questions[round];
+  document.querySelectorAll(".answer").forEach(b=>b.disabled=true);
+
+  if(i===q.c){
+    btn.classList.add("correct");
+    sounds.good.play();
+    if(discussion){
+      scores[currentPlayer]+=5;
+      scores=scores.map((s,idx)=>idx!==currentPlayer?s+5:s);
+      resultText.innerText="✔️ Richtig – alle +5 Punkte";
+    }else{
+      scores[currentPlayer]+=10;
+      resultText.innerText="🎉 Richtig! +10 Punkte";
+    }
+  }else{
+    btn.classList.add("wrong");
+    sounds.bad.play();
+    if(discussion){
+      scores[currentPlayer]-=5;
+      resultText.innerText="❌ Falsch – −5 Punkte";
+    }else{
+      resultText.innerText="❌ Falsch";
+    }
+  }
+  showScoreboardRound();
+}
+
+function endAnswer(){
+  resultText.innerText="⏱️ Zeit abgelaufen!";
+  showScoreboardRound();
+}
+
+function showScoreboardRound(){
+  game.classList.add("hidden");
+  result.classList.remove("hidden");
+  let out="";
+  players.forEach((p,i)=>{
+    out+=`<div class="scoreline">${p}: <b>${scores[i]}</b></div>`;
+  });
+  scoreboardRound.innerHTML=out;
+}
+
+function nextTurn(){
+  result.classList.add("hidden");
+  game.classList.remove("hidden");
+  currentPlayer++;
+  if(currentPlayer>=players.length){currentPlayer=0;round++}
+  if(round>=questions.length) return endGame();
+  showQuestion();
+}
+
+function endGame(){
+  game.classList.add("hidden");
+  end.classList.remove("hidden");
+  let out="";
+  players.forEach((p,i)=>{
+    out+=`<div class="scoreline">${p}: <b>${scores[i]} Punkte</b></div>`;
+  });
+  scoreboardEnd.innerHTML=out;
+}
+
+/* ---------- SCHNEEFALL ---------- */
+const canvas=document.getElementById("snow");
+const ctx=canvas.getContext("2d");
+let w,h,flakes=[];
+
+function resize(){
+  w=canvas.width=window.innerWidth;
+  h=canvas.height=window.innerHeight;
+}
+window.addEventListener("resize",resize);
+resize();
+
+for(let i=0;i<120;i++){
+  flakes.push({
+    x:Math.random()*w,
+    y:Math.random()*h,
+    r:Math.random()*3+1,
+    d:Math.random()+1
+  });
+}
+
+function snow(){
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle="white";
+  ctx.beginPath();
+  flakes.forEach(f=>{
+    ctx.moveTo(f.x,f.y);
+    ctx.arc(f.x,f.y,f.r,0,Math.PI*2);
+  });
+  ctx.fill();
+  flakes.forEach(f=>{
+    f.y+=f.d;
+    if(f.y>h){f.y=0;f.x=Math.random()*w}
+  });
+  requestAnimationFrame(snow);
+}
+snow();
+</script>
+</body>
+</html>
